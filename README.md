@@ -2,6 +2,8 @@
 
 > "Because forgetting a pattern during an interview is a pain we don't want to repeat." 
 
+### 🌐 **Live Demo Workspace:** [dsa-revision-tracker.pages.dev](https://dsa-revision-tracker.pages.dev/)
+
 Welcome to the **DSA Revision Tracker**—a high-fidelity, custom-engineered workstation built to rescue developers from the endless loop of forgetting LeetCode patterns. No more messy spreadsheets or broken schedules; this app handles your logic spacing while you handle the compilation.
 
 ---
@@ -38,28 +40,6 @@ This tracker fixes that by replacing chaotic review sessions with an automatic *
 * **The Style UI:** Tailwind CSS & Lucide Icons (Clean, graphite, modern look)
 * **The Engine Room:** Supabase DB & GoTrue Auth (PostgreSQL with strict data sandboxing)
 * **The Global Sky:** Deployed permanently on the **Cloudflare Pages Global CDN**
-
----
-
-## 📦 File Architecture
-
-├── .github/                # Automation & Version workflows
-├── public/
-│   └── _redirects          # Cloudflare SPA routing insurance policy
-├── src/
-│   ├── components/
-│   │   ├── LoadingScreen.jsx
-│   │   └── Layout.jsx       # Global structural frame + Sticky Footer
-│   ├── context/
-│   │   └── AuthContext.jsx  # Live authentication session tokens
-│   ├── lib/
-│   │   └── supabase.js      # Core instance handshake initialization
-│   ├── pages/
-│   │   └── Dashboard.jsx    # Primary Arena (Matrix, Streaks, Counters)
-│   ├── App.jsx              # Application Route configurations
-│   └── main.jsx
-├── .env.example            # Environment roadmap placeholder
-└── package.json
 
 ---
 
