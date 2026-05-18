@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import {
@@ -13,6 +13,7 @@ import LoadingScreen from "../components/LoadingScreen";
 import { useAuth } from "../context/AuthContext";
 
 export default function Dashboard() {
+  const hasFetchedData = useRef(false);
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -33,6 +34,9 @@ export default function Dashboard() {
     const fetchDashboardData = async () => {
       // CRITICAL RLS GUARD: Wait silently for the user session token to initialize
       if (!user?.id) return;
+
+      // BLOCKER: If the data has already been fetched once, break out immediately
+      if (hasFetchedData.current) return;
 
       setLoading(true);
       try {
@@ -110,7 +114,6 @@ export default function Dashboard() {
           if (item.revision_history && Array.isArray(item.revision_history)) {
             item.revision_history.forEach((historyTimestamp) => {
               const rDate = historyTimestamp.split("T")[0];
-              // DEDUPING FILTER: Stop double-counting submissions completed on creation day
               if (rDate !== createdDate) {
                 countsByDate[rDate] = (countsByDate[rDate] || 0) + 1;
               }
@@ -118,25 +121,8 @@ export default function Dashboard() {
           }
         });
 
-        // Dynamic Streak Calculation Pipeline
-        let currentStreak = 0;
-        let maxStreak = 0;
-        let runningStreak = 0;
-
-        // Calculate maximum historical streak across the 365-day pool
-        const streakScanner = new Date(oneYearAgo);
-        while (streakScanner <= now) {
-          const checkStr = `${streakScanner.getFullYear()}-${String(streakScanner.getMonth() + 1).padStart(2, "0")}-${String(streakScanner.getDate()).padStart(2, "0")}`;
-          if (countsByDate[checkStr] && countsByDate[checkStr] > 0) {
-            runningStreak++;
-            if (runningStreak > maxStreak) maxStreak = runningStreak;
-          } else {
-            runningStreak = 0;
-          }
-          streakScanner.setDate(streakScanner.getDate() + 1);
-        }
-
         // Calculate active live current streak tracking backward from today
+        let currentStreak = 0;
         const checkDate = new Date();
         let gapCount = 0;
         while (gapCount <= 1) {
@@ -154,19 +140,35 @@ export default function Dashboard() {
           checkDate.setDate(checkDate.getDate() - 1);
         }
 
+        // Calculate maximum historical streak across the 365-day pool
+        let maxStreak = currentStreak;
+        let runningStreak = 0;
+        const streakScanner = new Date(oneYearAgo);
+
+        while (streakScanner <= now) {
+          const checkStr = `${streakScanner.getFullYear()}-${String(streakScanner.getMonth() + 1).padStart(2, "0")}-${String(streakScanner.getDate()).padStart(2, "0")}`;
+          if (countsByDate[checkStr] && countsByDate[checkStr] > 0) {
+            runningStreak++;
+            if (runningStreak > maxStreak) maxStreak = runningStreak;
+          } else {
+            runningStreak = 0;
+          }
+          streakScanner.setDate(streakScanner.getDate() + 1);
+        }
+
         setStreaks({ current: currentStreak, max: maxStreak });
 
         // --- MATRIX MONTH GROUPINGS MAPPER ---
         const monthGroupings = [];
         const trackingDate = new Date(oneYearAgo);
+
         const initialOffset = trackingDate.getDay();
         trackingDate.setDate(trackingDate.getDate() - initialOffset);
 
+        const targetEndLimit = new Date(now);
+        targetEndLimit.setHours(23, 59, 59, 999);
+
         const monthNames = [
-          "Jan",
-          "Feb",
-          "Mar",
-          "Apr",
           "May",
           "Jun",
           "Jul",
@@ -175,41 +177,59 @@ export default function Dashboard() {
           "Oct",
           "Nov",
           "Dec",
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
         ];
+        let currentYear = oneYearAgo.getFullYear();
+        let targetMonthIndex = oneYearAgo.getMonth();
 
-        while (
-          trackingDate <= now ||
-          `${trackingDate.getFullYear()}-${String(trackingDate.getMonth() + 1).padStart(2, "0")}-${String(trackingDate.getDate()).padStart(2, "0")}` ===
-            localTodayStr ||
-          monthGroupings.flatMap((m) => m.days).length < 371
-        ) {
-          const mIndex = trackingDate.getMonth();
-          const mLabel = `${monthNames[mIndex]} '${String(trackingDate.getFullYear()).slice(-2)}`;
-          const currentDateString = `${trackingDate.getFullYear()}-${String(trackingDate.getMonth() + 1).padStart(2, "0")}-${String(trackingDate.getDate()).padStart(2, "0")}`;
+        for (let i = 0; i < monthNames.length; i++) {
+          const mName = monthNames[i];
+          if (mName === "Jan" && monthNames[i - 1] === "Dec") {
+            currentYear++;
+            targetMonthIndex = 0;
+          }
 
-          if (
-            monthGroupings.length === 0 ||
-            monthGroupings[monthGroupings.length - 1].label !== mLabel
-          ) {
+          const monthDaysList = [];
+          let loopDate = new Date(currentYear, targetMonthIndex, 1);
+          const endLimitDate = new Date(currentYear, targetMonthIndex + 1, 0);
+
+          if (i === 0) {
+            loopDate = new Date(oneYearAgo);
+          }
+
+          while (loopDate <= endLimitDate && loopDate <= targetEndLimit) {
+            const currentDateString = `${loopDate.getFullYear()}-${String(loopDate.getMonth() + 1).padStart(2, "0")}-${String(loopDate.getDate()).padStart(2, "0")}`;
+
+            monthDaysList.push({
+              dateStr: currentDateString,
+              count: countsByDate[currentDateString] || 0,
+              dayOfWeek: loopDate.getDay(),
+              displayDate: loopDate.toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              }),
+            });
+            loopDate.setDate(loopDate.getDate() + 1);
+          }
+
+          if (monthDaysList.length > 0) {
             monthGroupings.push({
-              label: mLabel,
-              days: [],
+              label: mName,
+              days: monthDaysList,
             });
           }
 
-          monthGroupings[monthGroupings.length - 1].days.push({
-            dateStr: currentDateString,
-            count: countsByDate[currentDateString] || 0,
-            displayDate: trackingDate.toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            }),
-          });
-
-          trackingDate.setDate(trackingDate.getDate() + 1);
+          targetMonthIndex = (targetMonthIndex + 1) % 12;
         }
 
         setMonthsData(monthGroupings);
+
+        // LOCK THE GATE: Set ref to true so subsequent focus remounts skip fetching entirely
+        hasFetchedData.current = true;
       } catch (error) {
         console.error("Dashboard matrix synchronization failure:", error);
       } finally {
@@ -341,22 +361,39 @@ export default function Dashboard() {
             </h3>
 
             <div className="w-full relative matrix-wrapper">
-              <div className="overflow-x-auto pb-2 pt-1 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-800 w-full">
-                <div className="flex flex-nowrap md:justify-center items-start gap-2 min-w-[780px] w-max mx-auto px-1">
+              <div className="overflow-x-auto lg:overflow-x-visible pb-2 pt-1 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-800 w-full">
+                {/* REMOVED min-w-[760px] entirely. 
+                  Used w-max on mobile so it hugs the actual content tightly with zero trailing gap, 
+                  and switched back to full w-full distribution on desktop.
+                */}
+                <div className="flex flex-nowrap lg:justify-between justify-start items-start gap-1.5 xl:gap-2 w-max lg:w-full mx-auto px-1 select-none">
                   {monthsData.map((month, mIdx) => (
                     <div
                       key={mIdx}
-                      className="flex flex-col gap-1.5 text-center shrink-0 w-[58px]"
+                      className="flex flex-col gap-1.5 text-center shrink-0 items-start flex-none lg:flex-1 max-w-max"
                     >
-                      <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 text-left pl-0.5 tracking-wider uppercase block select-none h-4">
-                        {month.label.split(" ")[0]}
+                      {/* Month Column Title Element */}
+                      <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 pl-0.5 tracking-wider uppercase block select-none h-4">
+                        {month.label}
                       </span>
 
+                      {/* 7-Row Grid Pipeline */}
                       <div className="grid grid-rows-7 grid-flow-col gap-[2px] auto-cols-max justify-start">
+                        {/* Adjust alignment offset matching the first cell day assignment */}
+                        {mIdx === 0 &&
+                          Array.from({ length: month.days[0].dayOfWeek }).map(
+                            (_, padIdx) => (
+                              <div
+                                key={`pad-${padIdx}`}
+                                className="w-[8px] h-[8px] xl:w-[9px] xl:h-[9px] aspect-square bg-transparent pointer-events-none"
+                              />
+                            ),
+                          )}
+
                         {month.days.map((day, dIdx) => (
                           <div
                             key={dIdx}
-                            className={`w-[10px] h-[10px] aspect-square rounded-[1.5px] border transition-transform duration-75 hover:scale-125 cursor-pointer ${getColorClass(day.count)}`}
+                            className={`w-[8px] h-[8px] xl:w-[9px] xl:h-[9px] aspect-square rounded-[1.5px] border transition-transform duration-75 hover:scale-125 cursor-pointer ${getColorClass(day.count)}`}
                             onMouseEnter={(e) => handleMouseEnterCell(e, day)}
                             onMouseLeave={() => setActiveTooltip(null)}
                           />
