@@ -10,6 +10,7 @@ import { useAuth } from "./context/AuthContext";
 import LoadingScreen from "./components/LoadingScreen";
 import Auth from "./pages/Auth";
 import { LogOut } from "lucide-react";
+import Navbar from "./components/Navbar";
 
 function App() {
   const { user, authLoading, logout } = useAuth();
@@ -58,63 +59,12 @@ function App() {
     <div className="min-h-screen flex flex-col transition-colors duration-200">
       <Toaster position="bottom-center" reverseOrder={false} />
       {/* Navigation Bar */}
-      <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 shadow-sm">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-          {/* Logo Section */}
-          <div className="flex items-center gap-2">
-            <Terminal className="text-blue-600 dark:text-blue-400" size={24} />
-            <h1 className="text-xl font-bold font-mono text-gray-800 dark:text-white whitespace-nowrap">
-              DSA Tracker
-            </h1>
-          </div>
-
-          {/* Links & Theme Toggle */}
-          <div className="flex flex-wrap justify-center gap-4 lg:gap-6 items-center">
-            <Link to="/" className={getLinkClass("/")}>
-              Dashboard
-            </Link>
-            <Link to="/master" className={getLinkClass("/master")}>
-              Add Problem
-            </Link>
-            <Link to="/all-problems" className={getLinkClass("/all-problems")}>
-              All Problems
-            </Link>
-            {/* The 4 Separate Revision Pages */}
-            <div className="h-6 w-px bg-gray-300 dark:bg-gray-600 hidden md:block"></div>
-
-            <Link to="/next-day" className={getLinkClass("/next-day")}>
-              Next Day
-            </Link>
-            <Link to="/weekend" className={getLinkClass("/weekend")}>
-              Weekend
-            </Link>
-            <Link to="/monthly" className={getLinkClass("/monthly")}>
-              Monthly
-            </Link>
-            <Link to="/adhoc" className={getLinkClass("/adhoc")}>
-              Ad-Hoc
-            </Link>
-
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors ml-2 border border-gray-200 dark:border-gray-600"
-            >
-              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-
-            <button
-              onClick={logout}
-              className="flex items-center gap-3 px-3 py-2.5 text-xs font-semibold text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 bg-gray-50 hover:bg-red-50 dark:bg-gray-900/40 dark:hover:bg-red-950/20 border border-gray-200 dark:border-gray-700/60 rounded-xl transition-all duration-150 group"
-            >
-              <LogOut
-                size={16}
-                className="text-gray-400 group-hover:text-red-500 transition-colors"
-              />
-            </button>
-          </div>
-        </div>
-      </nav>
-
+      <Navbar
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+        getLinkClass={getLinkClass}
+        logout={logout}
+      />
       {/* Main Page Content */}
       <main className="max-w-6xl mx-auto p-4 md:p-6 mt-2">
         <Routes>
@@ -161,8 +111,8 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Left branding */}
           <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 dark:text-gray-500 font-mono tracking-tight select-none">
-            <span>&lt;/&gt;</span>
-            <span>DSA Tracker</span>
+            <Terminal className="text-blue-300 dark:text-blue-200" size={18} />
+            <span>DSA Revision Tracker</span>
             <span className="text-[10px] bg-gray-100 dark:bg-gray-800 px-1.5 py-0.2 rounded border border-gray-200/40 dark:border-gray-700/30 font-sans font-medium">
               v1.0.0
             </span>
