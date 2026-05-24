@@ -11,12 +11,13 @@ import {
   Edit3,
   ChevronLeft,
   ChevronRight,
+  Bookmark,
   Filter,
 } from "lucide-react";
 import CreatableSelect from "react-select/creatable";
 import { toast } from "react-hot-toast";
 
-// Helper components remain identical...
+// --- HELPER COMPONENTS ---
 const PlatformLogo = ({ platform }) => {
   switch (platform) {
     case "LeetCode":
@@ -148,6 +149,7 @@ const StageBadge = ({ stage }) => {
   );
 };
 
+// --- MAIN COMPONENT ---
 export default function AllProblems() {
   const [problems, setProblems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -155,14 +157,24 @@ export default function AllProblems() {
   const [conceptOptions, setConceptOptions] = useState([]);
   const [isDark, setIsDark] = useState(false);
 
-  // --- NEW STATE: FILTER TRACKERS ---
+  // --- FILTER TRACKERS ---
   const [siteDifficultyFilter, setSiteDifficultyFilter] = useState("All");
   const [personalDifficultyFilter, setPersonalDifficultyFilter] =
     useState("All");
+  const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
 
+  // --- SORTING TRACKERS ---
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState("desc");
+
+  // --- MOBILE UI TRACKER ---
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+
+  // --- PAGINATION TRACKERS ---
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  // --- MODAL TRACKERS ---
   const [modalOpen, setModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState({
     title: "",
@@ -239,7 +251,7 @@ export default function AllProblems() {
     const { data, error } = await supabase
       .from("problems")
       .select("*")
-      .order("last_revised", { ascending: false });
+      .order("created_at", { ascending: false });
 
     if (error) console.error("Error fetching all problems:", error);
     else {
@@ -255,10 +267,42 @@ export default function AllProblems() {
     fetchAllProblems();
   }, []);
 
-  // Reset page layout when any filter metric updates
+  // Reset page index on any filter or sort change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, pageSize, siteDifficultyFilter, personalDifficultyFilter]);
+  }, [
+    searchTerm,
+    pageSize,
+    siteDifficultyFilter,
+    personalDifficultyFilter,
+    showBookmarkedOnly,
+    sortBy,
+    sortOrder,
+  ]);
+
+  const handleToggleBookmark = async (problemId, currentStatus) => {
+    const newStatus = !currentStatus;
+
+    setProblems((prev) =>
+      prev.map((p) =>
+        p.id === problemId ? { ...p, is_bookmarked: newStatus } : p,
+      ),
+    );
+
+    const { error } = await supabase
+      .from("problems")
+      .update({ is_bookmarked: newStatus })
+      .eq("id", problemId);
+
+    if (error) {
+      toast.error("Failed to sync bookmark status.");
+      setProblems((prev) =>
+        prev.map((p) =>
+          p.id === problemId ? { ...p, is_bookmarked: currentStatus } : p,
+        ),
+      );
+    }
+  };
 
   const triggerDeleteConfirmation = (problem) => {
     setProblemToDelete(problem);
@@ -341,6 +385,7 @@ export default function AllProblems() {
       "Site Difficulty",
       "Personal Difficulty",
       "Stage",
+      "Bookmarked",
       "Last Revised",
       "Next Revision Due",
       "Approach",
@@ -355,6 +400,7 @@ export default function AllProblems() {
       `"${p.site_difficulty}"`,
       `"${p.personal_difficulty}"`,
       `"${p.revision_stage}"`,
+      `"${p.is_bookmarked ? "Yes" : "No"}"`,
       `"${p.last_revised}"`,
       `"${p.next_revision_due || ""}"`,
       `"${(p.approach || "").replace(/"/g, '""')}"`,
@@ -384,7 +430,7 @@ export default function AllProblems() {
     setModalOpen(true);
   };
 
-  // --- MULTI-DIMENSIONAL FILTER PIPELINE EXECUTION ---
+  // --- FILTER & SORT TRANSFORMATION PIPELINE ---
   const filteredProblems = problems.filter((p) => {
     const searchLower = searchTerm.toLowerCase();
     const matchesName = p.problem_name.toLowerCase().includes(searchLower);
@@ -400,99 +446,187 @@ export default function AllProblems() {
       personalDifficultyFilter === "All" ||
       p.personal_difficulty === personalDifficultyFilter;
 
-    return matchesText && matchesSiteDiff && matchesPersDiff;
+    const matchesBookmark = showBookmarkedOnly
+      ? p.is_bookmarked === true
+      : true;
+
+    return matchesText && matchesSiteDiff && matchesPersDiff && matchesBookmark;
   });
 
-  const totalItems = filteredProblems.length;
+  const sortedProblems = [...filteredProblems].sort((a, b) => {
+    const dateA = new Date(a[sortBy] || a.created_at);
+    const dateB = new Date(b[sortBy] || b.created_at);
+
+    if (sortOrder === "desc") {
+      return dateB - dateA; // Newest first
+    } else {
+      return dateA - dateB; // Oldest first
+    }
+  });
+
+  const totalItems = sortedProblems.length;
   const totalPages = Math.ceil(totalItems / pageSize) || 1;
   const startIndex = (currentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
-  const paginatedProblems = filteredProblems.slice(startIndex, endIndex);
+  const paginatedProblems = sortedProblems.slice(startIndex, endIndex);
 
   return (
     <div className="space-y-6">
       <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-        {/* Responsive Toolbar Block Wrapper */}
         <div className="flex flex-col gap-4 mb-6">
+          {/* HEADER ROW */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
-              All Solved Problems
-            </h2>
-            <button
-              onClick={handleBackupCSV}
-              className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium rounded-lg text-sm border border-gray-300 dark:border-gray-600 shadow-sm shrink-0 self-end md:self-auto"
-            >
-              <Download size={16} /> <span>Backup CSV</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
+                All Solved Problems
+              </h2>
+              {!loading && (
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 text-xs font-bold rounded-full border border-blue-200 dark:border-blue-800/50 shadow-sm whitespace-nowrap">
+                  {totalItems} {totalItems === 1 ? "Problem" : "Problems"}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 self-end md:self-auto">
+              <button
+                onClick={() => setShowBookmarkedOnly(!showBookmarkedOnly)}
+                className={`flex items-center gap-2 px-3 py-2 font-medium rounded-lg text-sm border shadow-sm transition-colors ${
+                  showBookmarkedOnly
+                    ? "bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:border-amber-700/50 dark:text-amber-400"
+                    : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                }`}
+              >
+                <Bookmark
+                  size={16}
+                  className={showBookmarkedOnly ? "fill-current" : ""}
+                />
+                <span className="hidden sm:inline">
+                  {showBookmarkedOnly ? "Bookmarked" : "Show Bookmarks"}
+                </span>
+              </button>
+
+              <button
+                onClick={handleBackupCSV}
+                className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium rounded-lg text-sm border border-gray-300 dark:border-gray-600 shadow-sm shrink-0"
+              >
+                <Download size={16} />{" "}
+                <span className="hidden sm:inline">Backup CSV</span>
+              </button>
+            </div>
           </div>
 
-          {/* --- NEW MODULAR FILTER CONTROL BAR LAYER --- */}
-          <div className="bg-gray-50 dark:bg-gray-900/40 p-3 rounded-xl border border-gray-200 dark:border-gray-700/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-center">
-            {/* Input Text Control */}
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search size={16} className="text-gray-400" />
-              </span>
-              <input
-                type="text"
-                placeholder="Search problem or concept..."
-                className="w-full pl-9 p-2 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+          {/* --- OPTIMIZED FILTER CONTROL BAR LAYER --- */}
+          <div className="bg-gray-50 dark:bg-gray-900/40 p-3 md:p-4 rounded-xl border border-gray-200 dark:border-gray-700/80 flex flex-col gap-4 transition-all">
+            {/* Top Row: Always Visible (Search Bar & Mobile Toggle) */}
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search size={16} className="text-gray-400" />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Search problems or concepts..."
+                  className="w-full pl-9 p-2.5 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none shadow-sm transition-all"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+
+              {/* Mobile/Tablet Filter Toggle Button */}
+              <button
+                onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
+                className={`xl:hidden flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-bold transition-all shadow-sm shrink-0 ${
+                  isMobileFiltersOpen
+                    ? "bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400"
+                    : "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+              >
+                <Filter size={16} />
+                <span className="hidden sm:inline">Filters</span>
+              </button>
             </div>
 
-            {/* Site Difficulty Dropdown */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider shrink-0">
-                Site:
-              </span>
-              <select
-                className="w-full p-2 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                value={siteDifficultyFilter}
-                onChange={(e) => setSiteDifficultyFilter(e.target.value)}
-              >
-                <option value="All">All Difficulties</option>
-                <option value="Easy">Easy</option>
-                <option value="Medium">Medium</option>
-                <option value="Hard">Hard</option>
-              </select>
-            </div>
+            {/* Expandable Dropdowns Grid */}
+            <div
+              className={`${isMobileFiltersOpen ? "grid" : "hidden"} xl:grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 items-end animate-fadeIn`}
+            >
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-1">
+                  Site Difficulty
+                </span>
+                <select
+                  className="w-full p-2 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 font-medium shadow-sm cursor-pointer"
+                  value={siteDifficultyFilter}
+                  onChange={(e) => setSiteDifficultyFilter(e.target.value)}
+                >
+                  <option value="All">All Levels</option>
+                  <option value="Easy">Easy</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Hard">Hard</option>
+                </select>
+              </div>
 
-            {/* Personal Difficulty Faced Dropdown */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider shrink-0">
-                Felt:
-              </span>
-              <select
-                className="w-full p-2 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                value={personalDifficultyFilter}
-                onChange={(e) => setPersonalDifficultyFilter(e.target.value)}
-              >
-                <option value="All">All Friction Levels</option>
-                <option value="Simple">Simple</option>
-                <option value="Good">Good</option>
-                <option value="Difficult">Difficult</option>
-                <option value="Required PreReading">
-                  Required Pre-Reading
-                </option>
-              </select>
-            </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-1">
+                  Friction Felt
+                </span>
+                <select
+                  className="w-full p-2 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 font-medium shadow-sm cursor-pointer"
+                  value={personalDifficultyFilter}
+                  onChange={(e) => setPersonalDifficultyFilter(e.target.value)}
+                >
+                  <option value="All">All Friction</option>
+                  <option value="Simple">Simple</option>
+                  <option value="Good">Good</option>
+                  <option value="Difficult">Difficult</option>
+                  <option value="Required PreReading">
+                    Required Pre-Reading
+                  </option>
+                </select>
+              </div>
 
-            {/* Page Size Metric Controller */}
-            <div className="flex items-center gap-2 justify-end">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider shrink-0">
-                Show:
-              </span>
-              <select
-                className="w-20 p-2 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-1">
+                  Sort By
+                </span>
+                <select
+                  className="w-full p-2 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 font-medium shadow-sm cursor-pointer"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                >
+                  <option value="created_at">Date Added</option>
+                  <option value="last_revised">Last Revised</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-1">
+                  Order
+                </span>
+                <select
+                  className="w-full p-2 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 font-medium shadow-sm cursor-pointer"
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                >
+                  <option value="desc">Newest First</option>
+                  <option value="asc">Oldest First</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1">
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider pl-1">
+                  Per Page
+                </span>
+                <select
+                  className="w-full p-2 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 font-semibold shadow-sm cursor-pointer"
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                >
+                  <option value={10}>10 Items</option>
+                  <option value={25}>25 Items</option>
+                  <option value={50}>50 Items</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -526,12 +660,31 @@ export default function AllProblems() {
                     <div>
                       <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         {p.problem_name}
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleToggleBookmark(p.id, p.is_bookmarked);
+                          }}
+                          className="focus:outline-none focus:ring-0 ml-1"
+                          title={
+                            p.is_bookmarked ? "Remove Bookmark" : "Add Bookmark"
+                          }
+                        >
+                          <Bookmark
+                            size={18}
+                            className={`transition-colors ${
+                              p.is_bookmarked
+                                ? "text-amber-500 fill-amber-500"
+                                : "text-gray-300 dark:text-gray-600 hover:text-amber-400 dark:hover:text-amber-400"
+                            }`}
+                          />
+                        </button>
                         {p.url && (
                           <a
                             href={p.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-blue-500 hover:text-blue-700"
+                            className="text-blue-500 hover:text-blue-700 ml-1"
                           >
                             <ExternalLink size={16} />
                           </a>
@@ -738,7 +891,7 @@ export default function AllProblems() {
         </div>
       )}
 
-      {/* Reader and Edit Modals */}
+      {/* Reader Modals */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-5xl max-h-[85vh] flex flex-col shadow-2xl border border-gray-200 dark:border-gray-700 transition-all">
@@ -777,6 +930,7 @@ export default function AllProblems() {
         </div>
       )}
 
+      {/* Edit Modals */}
       {editModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl border border-gray-200 dark:border-gray-700">
