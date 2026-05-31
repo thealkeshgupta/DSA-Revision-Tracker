@@ -16,40 +16,43 @@ import {
 } from "lucide-react";
 import CreatableSelect from "react-select/creatable";
 import { toast } from "react-hot-toast";
-
-// --- KATEX IMPORTS ---
 import "katex/dist/katex.min.css";
 import { BlockMath, InlineMath } from "react-katex";
 
-// --- MATH FORMATTER COMPONENT ---
 const MathFormatter = ({ text }) => {
   if (!text) return null;
 
-  // Restore only Tabs which corrupt LaTeX macros, leave other whitespace alone.
-  const safeText = text.replace(/\t/g, "\\t");
-
-  // Verified clean regex to split by $$...$$ or $...$
-  const tokens = safeText.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
+  const tokens = text.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
 
   return (
     <>
       {tokens.map((token, index) => {
+        // If token is a block math $$...$$
         if (token.startsWith("$$") && token.endsWith("$$")) {
           return (
-            <div key={index} className="italic-math block italic my-2">
+            <div
+              key={index}
+              className="not-italic block my-2"
+              style={{ fontStyle: "normal" }}
+            >
               <BlockMath math={token.slice(2, -2)} />
             </div>
           );
-        } else if (token.startsWith("$") && token.endsWith("$")) {
+        }
+        // If token is inline math $...$
+        else if (token.startsWith("$") && token.endsWith("$")) {
           return (
             <span
               key={index}
-              className="inline-block italic font-medium mx-0.5 text-gray-900 dark:text-gray-100"
+              className="not-italic inline-block font-medium mx-0.5"
+              style={{ fontStyle: "normal" }}
             >
               <InlineMath math={token.slice(1, -1)} />
             </span>
           );
-        } else {
+        }
+        // Normal text
+        else {
           return <span key={index}>{token}</span>;
         }
       })}
