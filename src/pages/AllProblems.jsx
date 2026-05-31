@@ -22,12 +22,20 @@ import { BlockMath, InlineMath } from "react-katex";
 const MathFormatter = ({ text }) => {
   if (!text) return null;
 
-  const tokens = text.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
+  // 1. Cloak the backslashes so the build-minifier doesn't corrupt them
+  // \times becomes __BS__times
+  const cloakedText = text.replace(/\\/g, "__BS__");
+
+  // 2. Split on the delimiters
+  // Note: We search for the delimiters in the CLOAKED text
+  const tokens = cloakedText.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
 
   return (
     <>
       {tokens.map((token, index) => {
-        // If token is a block math $$...$$
+        // 3. Uncloak the backslashes ONLY for the math tokens
+        const uncloak = (str) => str.replace(/__BS__/g, "\\");
+
         if (token.startsWith("$$") && token.endsWith("$$")) {
           return (
             <div
@@ -35,25 +43,21 @@ const MathFormatter = ({ text }) => {
               className="not-italic block my-2"
               style={{ fontStyle: "normal" }}
             >
-              <BlockMath math={token.slice(2, -2)} />
+              <BlockMath math={uncloak(token.slice(2, -2))} />
             </div>
           );
-        }
-        // If token is inline math $...$
-        else if (token.startsWith("$") && token.endsWith("$")) {
+        } else if (token.startsWith("$") && token.endsWith("$")) {
           return (
             <span
               key={index}
               className="not-italic inline-block font-medium mx-0.5"
               style={{ fontStyle: "normal" }}
             >
-              <InlineMath math={token.slice(1, -1)} />
+              <InlineMath math={uncloak(token.slice(1, -1))} />
             </span>
           );
-        }
-        // Normal text
-        else {
-          return <span key={index}>{token}</span>;
+        } else {
+          return <span key={index}>{uncloak(token)}</span>;
         }
       })}
     </>
