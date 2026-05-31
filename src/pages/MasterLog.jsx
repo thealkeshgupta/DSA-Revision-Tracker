@@ -170,6 +170,11 @@ export default function MasterLog() {
     }
   };
 
+  const escapeBackslashes = (str) => {
+    if (typeof str !== "string") return str;
+    return str.replace(/\\/g, "\\\\");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -181,6 +186,8 @@ export default function MasterLog() {
     const { error } = await supabase.from("problems").insert([
       {
         ...formData,
+        approach: escapeBackslashes(formData.approach),
+        mistakes: escapeBackslashes(formData.mistakes),
         user_id: user.id,
         concepts: conceptsArray,
         next_revision_due: getLocalYMD(tomorrow),

@@ -22,20 +22,17 @@ import { BlockMath, InlineMath } from "react-katex";
 const MathFormatter = ({ text }) => {
   if (!text) return null;
 
-  // 1. Cloak the backslashes so the build-minifier doesn't corrupt them
-  // \times becomes __BS__times
-  const cloakedText = text.replace(/\\/g, "__BS__");
+  // The database now sends \\times, so we tell KaTeX to interpret that as \times
+  // We use .replace(/\\\\/g, "\\") to turn the double backslashes into single ones for the renderer.
+  const displayableText = text.replace(/\\\\/g, "\\");
 
-  // 2. Split on the delimiters
-  // Note: We search for the delimiters in the CLOAKED text
-  const tokens = cloakedText.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
+  const tokens = displayableText.split(
+    /(\$\$(?:[\s\S]*?)\$\$|\$(?:[\s\S]*?)\$)/g,
+  );
 
   return (
     <>
       {tokens.map((token, index) => {
-        // 3. Uncloak the backslashes ONLY for the math tokens
-        const uncloak = (str) => str.replace(/__BS__/g, "\\");
-
         if (token.startsWith("$$") && token.endsWith("$$")) {
           return (
             <div
@@ -43,7 +40,7 @@ const MathFormatter = ({ text }) => {
               className="not-italic block my-2"
               style={{ fontStyle: "normal" }}
             >
-              <BlockMath math={uncloak(token.slice(2, -2))} />
+              <BlockMath math={token.slice(2, -2)} />
             </div>
           );
         } else if (token.startsWith("$") && token.endsWith("$")) {
@@ -53,11 +50,11 @@ const MathFormatter = ({ text }) => {
               className="not-italic inline-block font-medium mx-0.5"
               style={{ fontStyle: "normal" }}
             >
-              <InlineMath math={uncloak(token.slice(1, -1))} />
+              <InlineMath math={token.slice(1, -1)} />
             </span>
           );
         } else {
-          return <span key={index}>{uncloak(token)}</span>;
+          return <span key={index}>{token}</span>;
         }
       })}
     </>
