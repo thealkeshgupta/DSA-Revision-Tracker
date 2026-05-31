@@ -22,28 +22,34 @@ import "katex/dist/katex.min.css";
 import { BlockMath, InlineMath } from "react-katex";
 
 // --- MATH FORMATTER COMPONENT ---
-// This safely scans text strings and formats text inside $..$ as inline math and $$..$$ as block math
 const MathFormatter = ({ text }) => {
   if (!text) return null;
 
-  // Safely restore ONLY Tabs (\t) which corrupt \times and \text.
-  // We leave \n alone so your actual "Enter" keystrokes render as proper line breaks!
+  // Restore only Tabs which corrupt LaTeX macros, leave other whitespace alone.
   const safeText = text.replace(/\t/g, "\\t");
 
-  // Regex to split string by $$block$$ or $inline$ math delimiters
+  // Verified clean regex to split by $$...$$ or $...$
   const tokens = safeText.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
 
   return (
     <>
       {tokens.map((token, index) => {
         if (token.startsWith("$$") && token.endsWith("$$")) {
-          // Render Block Math (centered, isolated line)
-          return <BlockMath key={index} math={token.slice(2, -2)} />;
+          return (
+            <div key={index} className="italic-math block italic my-2">
+              <BlockMath math={token.slice(2, -2)} />
+            </div>
+          );
         } else if (token.startsWith("$") && token.endsWith("$")) {
-          // Render Inline Math (flows with normal text)
-          return <InlineMath key={index} math={token.slice(1, -1)} />;
+          return (
+            <span
+              key={index}
+              className="inline-block italic font-medium mx-0.5 text-gray-900 dark:text-gray-100"
+            >
+              <InlineMath math={token.slice(1, -1)} />
+            </span>
+          );
         } else {
-          // Render standard text normally
           return <span key={index}>{token}</span>;
         }
       })}
