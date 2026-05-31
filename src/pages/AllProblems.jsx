@@ -26,8 +26,12 @@ import { BlockMath, InlineMath } from "react-katex";
 const MathFormatter = ({ text }) => {
   if (!text) return null;
 
+  // Safely restore ONLY Tabs (\t) which corrupt \times and \text.
+  // We leave \n alone so your actual "Enter" keystrokes render as proper line breaks!
+  const safeText = text.replace(/\t/g, "\\t");
+
   // Regex to split string by $$block$$ or $inline$ math delimiters
-  const tokens = text.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
+  const tokens = safeText.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
 
   return (
     <>
@@ -795,33 +799,31 @@ export default function AllProblems() {
                       onClick={() =>
                         openReader(p.problem_name, p.approach, "Approach")
                       }
-                      className={`p-3 rounded-lg border ${p.approach ? "cursor-pointer hover:bg-blue-100/40 dark:hover:bg-blue-900/20" : ""} bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30`}
+                      className={`p-3 rounded-lg border ${p.approach ? "cursor-pointer hover:bg-blue-100/40 dark:hover:bg-blue-900/20" : ""} bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30 overflow-x-auto`}
                     >
                       <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1 mb-1 uppercase tracking-wider">
                         <FileText size={14} /> Approach
                       </span>
-                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap line-clamp-3">
-                        {/* --- KA-TEX FORMATTER INJECTED HERE --- */}
+                      <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words font-sans line-clamp-3">
                         <MathFormatter
                           text={p.approach || "No approach recorded."}
                         />
-                      </p>
+                      </div>
                     </div>
                     <div
                       onClick={() =>
                         openReader(p.problem_name, p.mistakes, "Mistakes")
                       }
-                      className={`p-3 rounded-lg border ${p.mistakes ? "cursor-pointer hover:bg-red-100/40 dark:hover:bg-red-900/20" : ""} bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30`}
+                      className={`p-3 rounded-lg border ${p.mistakes ? "cursor-pointer hover:bg-red-100/40 dark:hover:bg-red-900/20" : ""} bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30 overflow-x-auto`}
                     >
                       <span className="text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-1 mb-1 uppercase tracking-wider">
                         <AlertTriangle size={14} /> Mistakes
                       </span>
-                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap line-clamp-3">
-                        {/* --- KA-TEX FORMATTER INJECTED HERE --- */}
+                      <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words font-sans line-clamp-3">
                         <MathFormatter
                           text={p.mistakes || "No mistakes recorded."}
                         />
-                      </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -949,8 +951,7 @@ export default function AllProblems() {
               </button>
             </div>
             <div className="p-6 overflow-y-auto max-h-[calc(85vh-140px)]">
-              <div className="text-gray-700 dark:text-gray-300 text-base leading-relaxed whitespace-pre-wrap font-sans">
-                {/* --- KA-TEX FORMATTER INJECTED HERE (Modal View) --- */}
+              <div className="text-gray-700 dark:text-gray-300 text-base leading-relaxed whitespace-pre-wrap font-sans overflow-x-auto min-w-0">
                 <MathFormatter text={modalContent.text} />
               </div>
             </div>
