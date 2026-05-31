@@ -17,6 +17,36 @@ import {
 import CreatableSelect from "react-select/creatable";
 import { toast } from "react-hot-toast";
 
+// --- KATEX IMPORTS ---
+import "katex/dist/katex.min.css";
+import { BlockMath, InlineMath } from "react-katex";
+
+// --- MATH FORMATTER COMPONENT ---
+// This safely scans text strings and formats text inside $..$ as inline math and $$..$$ as block math
+const MathFormatter = ({ text }) => {
+  if (!text) return null;
+
+  // Regex to split string by $$block$$ or $inline$ math delimiters
+  const tokens = text.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
+
+  return (
+    <>
+      {tokens.map((token, index) => {
+        if (token.startsWith("$$") && token.endsWith("$$")) {
+          // Render Block Math (centered, isolated line)
+          return <BlockMath key={index} math={token.slice(2, -2)} />;
+        } else if (token.startsWith("$") && token.endsWith("$")) {
+          // Render Inline Math (flows with normal text)
+          return <InlineMath key={index} math={token.slice(1, -1)} />;
+        } else {
+          // Render standard text normally
+          return <span key={index}>{token}</span>;
+        }
+      })}
+    </>
+  );
+};
+
 // --- HELPER COMPONENTS ---
 const PlatformLogo = ({ platform }) => {
   switch (platform) {
@@ -267,7 +297,6 @@ export default function AllProblems() {
     fetchAllProblems();
   }, []);
 
-  // Reset page index on any filter or sort change
   useEffect(() => {
     setCurrentPage(1);
   }, [
@@ -458,9 +487,9 @@ export default function AllProblems() {
     const dateB = new Date(b[sortBy] || b.created_at);
 
     if (sortOrder === "desc") {
-      return dateB - dateA; // Newest first
+      return dateB - dateA;
     } else {
-      return dateA - dateB; // Oldest first
+      return dateA - dateB;
     }
   });
 
@@ -772,7 +801,10 @@ export default function AllProblems() {
                         <FileText size={14} /> Approach
                       </span>
                       <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap line-clamp-3">
-                        {p.approach || "No approach recorded."}
+                        {/* --- KA-TEX FORMATTER INJECTED HERE --- */}
+                        <MathFormatter
+                          text={p.approach || "No approach recorded."}
+                        />
                       </p>
                     </div>
                     <div
@@ -785,7 +817,10 @@ export default function AllProblems() {
                         <AlertTriangle size={14} /> Mistakes
                       </span>
                       <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap line-clamp-3">
-                        {p.mistakes || "No mistakes recorded."}
+                        {/* --- KA-TEX FORMATTER INJECTED HERE --- */}
+                        <MathFormatter
+                          text={p.mistakes || "No mistakes recorded."}
+                        />
                       </p>
                     </div>
                   </div>
@@ -914,9 +949,10 @@ export default function AllProblems() {
               </button>
             </div>
             <div className="p-6 overflow-y-auto max-h-[calc(85vh-140px)]">
-              <p className="text-gray-700 dark:text-gray-300 text-base leading-relaxed whitespace-pre-wrap font-sans">
-                {modalContent.text}
-              </p>
+              <div className="text-gray-700 dark:text-gray-300 text-base leading-relaxed whitespace-pre-wrap font-sans">
+                {/* --- KA-TEX FORMATTER INJECTED HERE (Modal View) --- */}
+                <MathFormatter text={modalContent.text} />
+              </div>
             </div>
             <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end bg-gray-50 dark:bg-gray-800/50 rounded-b-2xl">
               <button

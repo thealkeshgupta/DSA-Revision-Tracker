@@ -8,9 +8,38 @@ import {
   Search,
   Bookmark,
   Filter,
+  FileText,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import LoadingScreen from "../components/LoadingScreen";
 import { toast } from "react-hot-toast";
+
+// --- KATEX IMPORTS ---
+import "katex/dist/katex.min.css";
+import { BlockMath, InlineMath } from "react-katex";
+
+// --- MATH FORMATTER COMPONENT ---
+const MathFormatter = ({ text }) => {
+  if (!text) return null;
+
+  const tokens = text.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
+
+  return (
+    <>
+      {tokens.map((token, index) => {
+        if (token.startsWith("$$") && token.endsWith("$$")) {
+          return <BlockMath key={index} math={token.slice(2, -2)} />;
+        } else if (token.startsWith("$") && token.endsWith("$")) {
+          return <InlineMath key={index} math={token.slice(1, -1)} />;
+        } else {
+          return <span key={index}>{token}</span>;
+        }
+      })}
+    </>
+  );
+};
 
 const PlatformLogo = ({ platform }) => {
   switch (platform) {
@@ -112,6 +141,10 @@ export default function RevisionQueue({ title, stageFilter }) {
   const [problems, setProblems] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // --- UI INTERACTION TRACKERS ---
+  const [expandedIds, setExpandedIds] = useState([]);
+  const [completingIds, setCompletingIds] = useState([]);
+
   // --- REVISION INTERFACE ACTIVE FILTER POOLS ---
   const [siteDifficultyFilter, setSiteDifficultyFilter] = useState("All");
   const [personalDifficultyFilter, setPersonalDifficultyFilter] =
@@ -119,14 +152,9 @@ export default function RevisionQueue({ title, stageFilter }) {
   const [queueSearchTerm, setQueueSearchTerm] = useState("");
   const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
 
-  // --- SORTING TRACKERS ---
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState("desc");
-
-  // --- MOBILE UI TRACKER ---
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
-
-  // --- PAGINATION TRACKERS ---
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -175,9 +203,10 @@ export default function RevisionQueue({ title, stageFilter }) {
 
   useEffect(() => {
     fetchProblems();
+    setExpandedIds([]);
+    setCompletingIds([]);
   }, [stageFilter]);
 
-  // Adjust page index tracking dynamically when criteria parameters alter structure shapes
   useEffect(() => {
     setCurrentPage(1);
   }, [
@@ -189,6 +218,12 @@ export default function RevisionQueue({ title, stageFilter }) {
     sortBy,
     sortOrder,
   ]);
+
+  const toggleExpand = (id) => {
+    setExpandedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
 
   const handleToggleBookmark = async (problemId, currentStatus) => {
     const newStatus = !currentStatus;
@@ -215,6 +250,9 @@ export default function RevisionQueue({ title, stageFilter }) {
   };
 
   const handleComplete = async (problem) => {
+    setCompletingIds((prev) => [...prev, problem.id]);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
     const todayStr = getLocalYMD();
     const { nextStage, nextDate } = calculateNextRevision(
       problem.revision_stage,
@@ -231,14 +269,18 @@ export default function RevisionQueue({ title, stageFilter }) {
       })
       .eq("id", problem.id);
 
-    if (error) alert("Failed to update: " + error.message);
-    else setProblems(problems.filter((p) => p.id !== problem.id));
+    if (error) {
+      toast.error("Failed to update: " + error.message);
+      setCompletingIds((prev) => prev.filter((id) => id !== problem.id));
+    } else {
+      setProblems((prev) => prev.filter((p) => p.id !== problem.id));
+      setCompletingIds((prev) => prev.filter((id) => id !== problem.id));
+    }
   };
 
   if (loading)
     return <LoadingScreen message={`Compiling ${title} matrix...`} />;
 
-  // --- FILTER & SORT TRANSFORMATION COMPUTE PIPELINE ---
   const filteredProblems = problems.filter((p) => {
     const searchLower = queueSearchTerm.toLowerCase();
     const matchesName = p.problem_name.toLowerCase().includes(searchLower);
@@ -266,9 +308,9 @@ export default function RevisionQueue({ title, stageFilter }) {
     const dateB = new Date(b[sortBy] || b.created_at);
 
     if (sortOrder === "desc") {
-      return dateB - dateA; // Newest first
+      return dateB - dateA;
     } else {
-      return dateA - dateB; // Oldest first
+      return dateA - dateB;
     }
   });
 
@@ -316,7 +358,6 @@ export default function RevisionQueue({ title, stageFilter }) {
 
       {/* --- OPTIMIZED FILTER CONTROL BAR LAYER --- */}
       <div className="bg-gray-50 dark:bg-gray-900/40 p-3 md:p-4 rounded-xl border border-gray-200 dark:border-gray-700/80 flex flex-col gap-4 transition-all">
-        {/* Top Row: Always Visible (Search Bar & Mobile Toggle) */}
         <div className="flex items-center gap-3">
           <div className="relative flex-1">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -331,7 +372,6 @@ export default function RevisionQueue({ title, stageFilter }) {
             />
           </div>
 
-          {/* Mobile/Tablet Filter Toggle Button */}
           <button
             onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
             className={`xl:hidden flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-bold transition-all shadow-sm shrink-0 ${
@@ -345,7 +385,6 @@ export default function RevisionQueue({ title, stageFilter }) {
           </button>
         </div>
 
-        {/* Expandable Dropdowns Grid */}
         <div
           className={`${isMobileFiltersOpen ? "grid" : "hidden"} xl:grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 items-end animate-fadeIn`}
         >
@@ -436,73 +475,160 @@ export default function RevisionQueue({ title, stageFilter }) {
       ) : (
         <div className="space-y-4 pt-2">
           <div className="grid gap-4">
-            {paginatedProblems.map((p) => (
-              <div
-                key={p.id}
-                className="p-4 rounded-xl border flex flex-col md:flex-row justify-between md:items-center gap-4 transition-all bg-gray-50 border-gray-200 dark:bg-gray-800/50 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="mt-1">
-                    <PlatformLogo platform={p.platform} />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-lg dark:text-white mb-1 flex items-center gap-2">
-                      <a
-                        href={p.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-blue-600 dark:text-blue-400 hover:underline"
-                      >
-                        {p.problem_name}
-                      </a>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleToggleBookmark(p.id, p.is_bookmarked);
-                        }}
-                        className="focus:outline-none focus:ring-0 ml-1"
-                        title={
-                          p.is_bookmarked ? "Remove Bookmark" : "Add Bookmark"
-                        }
-                      >
-                        <Bookmark
-                          size={18}
-                          className={`transition-colors ${
-                            p.is_bookmarked
-                              ? "text-amber-500 fill-amber-500"
-                              : "text-gray-300 dark:text-gray-600 hover:text-amber-400 dark:hover:text-amber-400"
-                          }`}
-                        />
-                      </button>
-                    </h4>
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      <DifficultyChip label={p.site_difficulty} type="site" />
-                      <DifficultyChip
-                        label={p.personal_difficulty}
-                        type="personal"
-                      />
+            {paginatedProblems.map((p) => {
+              const isExpanded = expandedIds.includes(p.id);
+              const isCompleting = completingIds.includes(p.id);
+
+              return (
+                <div
+                  key={p.id}
+                  className={`p-5 rounded-xl border flex flex-col transition-all duration-700 ease-in-out transform w-full min-w-0 ${
+                    isCompleting
+                      ? "opacity-0 scale-95 -translate-y-4 pointer-events-none bg-green-50 border-green-400 shadow-lg dark:bg-green-900/30 dark:border-green-600"
+                      : isExpanded
+                        ? "bg-white dark:bg-gray-800 border-blue-300 shadow-md dark:border-blue-600 gap-0"
+                        : "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 gap-0"
+                  }`}
+                >
+                  {/* --- TOP TEASER BAR --- */}
+                  <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 w-full">
+                    <div className="flex items-start gap-4">
+                      <div className="mt-1">
+                        <PlatformLogo platform={p.platform} />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-lg dark:text-white mb-1 flex items-center gap-2">
+                          <a
+                            href={p.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            {p.problem_name}
+                          </a>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleToggleBookmark(p.id, p.is_bookmarked);
+                            }}
+                            className="focus:outline-none focus:ring-0 ml-1"
+                            title={
+                              p.is_bookmarked
+                                ? "Remove Bookmark"
+                                : "Add Bookmark"
+                            }
+                          >
+                            <Bookmark
+                              size={18}
+                              className={`transition-colors ${
+                                p.is_bookmarked
+                                  ? "text-amber-500 fill-amber-500"
+                                  : "text-gray-300 dark:text-gray-600 hover:text-amber-400 dark:hover:text-amber-400"
+                              }`}
+                            />
+                          </button>
+                        </h4>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          <DifficultyChip
+                            label={p.site_difficulty}
+                            type="site"
+                          />
+                          <DifficultyChip
+                            label={p.personal_difficulty}
+                            type="personal"
+                          />
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
+                          <span className="font-semibold">Concepts:</span>{" "}
+                          {p.concepts?.join(", ") || "None"}
+                          <span className="mx-2">•</span>
+                          <span className="font-semibold text-blue-600 dark:text-blue-400">
+                            Last Revised: {p.last_revised}
+                          </span>
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
-                      <span className="font-semibold">Concepts:</span>{" "}
-                      {p.concepts?.join(", ") || "None"}
-                      <span className="mx-2">•</span>
-                      <span className="font-semibold text-blue-600 dark:text-blue-400">
-                        Last Revised: {p.last_revised}
-                      </span>
-                    </p>
+
+                    <button
+                      onClick={() => toggleExpand(p.id)}
+                      className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg transition shrink-0 font-bold text-sm border shadow-sm ${
+                        isExpanded
+                          ? "bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600"
+                          : "bg-white text-blue-600 border-blue-200 hover:bg-blue-50 dark:bg-gray-800 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-gray-700"
+                      }`}
+                    >
+                      {stageFilter === "AD_HOC"
+                        ? "View Notes"
+                        : "Review & Complete"}
+                      {isExpanded ? (
+                        <ChevronUp size={18} />
+                      ) : (
+                        <ChevronDown size={18} />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* --- SMOOTH ACCORDION CONTAINER --- */}
+                  <div
+                    className="grid transition-all duration-300 ease-in-out w-full"
+                    style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
+                  >
+                    <div className="overflow-hidden w-full">
+                      <div
+                        className={`pt-5 mt-4 border-t border-gray-200 dark:border-gray-700 transition-opacity duration-300 w-full ${isExpanded ? "opacity-100" : "opacity-0"}`}
+                      >
+                        {/* Notes Grid with horizontal overflow locks */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 w-full">
+                          <div className="p-4 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 overflow-x-auto min-w-0 w-full">
+                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+                              <FileText size={14} /> Approach Notes
+                            </span>
+                            <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words font-sans leading-relaxed">
+                              <MathFormatter
+                                text={p.approach || "No approach recorded."}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="p-4 rounded-xl bg-red-50/50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 overflow-x-auto min-w-0 w-full">
+                            <span className="text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+                              <AlertTriangle size={14} /> Mistakes & Fixes
+                            </span>
+                            <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words font-sans leading-relaxed">
+                              <MathFormatter
+                                text={p.mistakes || "No mistakes recorded."}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {stageFilter !== "AD_HOC" && (
+                          <div className="flex justify-end pt-2">
+                            <button
+                              onClick={() => handleComplete(p)}
+                              disabled={isCompleting}
+                              className={`flex items-center gap-2 px-6 py-3 text-white rounded-xl shadow-md font-bold text-sm transition-all duration-300 ${
+                                isCompleting
+                                  ? "bg-green-500 scale-105"
+                                  : "bg-green-600 hover:bg-green-700 hover:shadow-lg hover:-translate-y-0.5"
+                              }`}
+                            >
+                              {isCompleting ? (
+                                "Completed! 🎉"
+                              ) : (
+                                <>
+                                  <CheckCircle size={18} /> Mark as Reviewed
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-
-                {stageFilter !== "AD_HOC" && (
-                  <button
-                    onClick={() => handleComplete(p)}
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition shrink-0 shadow-sm font-semibold text-sm"
-                  >
-                    <CheckCircle size={18} /> Mark Complete
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {totalPages > 1 && (
